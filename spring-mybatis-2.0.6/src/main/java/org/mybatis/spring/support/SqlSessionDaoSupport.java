@@ -20,6 +20,7 @@ import static org.springframework.util.Assert.notNull;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.mybatis.spring.mapper.ClassPathMapperScanner;
 import org.springframework.dao.support.DaoSupport;
 
 /**
@@ -32,6 +33,10 @@ import org.springframework.dao.support.DaoSupport;
  * @author Putthiphong Boonphong
  * @author Eduardo Macarron
  *
+ *  定义了 获取 sqlSessionTemplate、SqlSession（sqlSessionTemplate） 的方法
+ *
+ *  用户可以继承该 SqlSessionDaoSupport 实现 Dao，注入到 Service 中，但是实际上不推荐
+ *
  * @see #setSqlSessionFactory
  * @see #setSqlSessionTemplate
  * @see SqlSessionTemplate
@@ -43,6 +48,20 @@ public abstract class SqlSessionDaoSupport extends DaoSupport {
   /**
    * Set MyBatis SqlSessionFactory to be used by this DAO. Will automatically create SqlSessionTemplate for the given
    * SqlSessionFactory.
+   *
+   * {@link ClassPathMapperScanner#doScan(String...)} processBeanDefinitions 方法中有一段代码
+   *       // 如果上述的  sqlSessionTemplate 、sqlSessionFactory 未显式设置，则设置根据类型自动注入，根据类型自动注入
+   *    *       if (!explicitFactoryUsed) {
+   *    *         LOGGER.debug(() -> "Enabling autowire by type for MapperFactoryBean with name '" + holder.getBeanName() + "'.");
+   *    *         definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
+   *    *       }
+   *
+   *                 AbstractAutowireCapableBeanFactory#populateBean，根据类型自动依赖注入
+   *                 protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable BeanWrapper bw)
+   *                 if (resolvedAutowireMode == 2) {
+   *                     this.autowireByType(beanName, mbd, bw, newPvs);
+   *                 }
+   *
    *
    * @param sqlSessionFactory
    *          a factory of SqlSession

@@ -69,6 +69,10 @@ import org.springframework.context.annotation.Import;
  * @author Michael Lanyon
  * @author Eduardo Macarron
  *
+ * Spring-Mybatis 扫描配置注解
+ *   其实就是 等同于 <mybatis:scan>
+ *
+ *  注意 @Import 注解 -- 目光转移到 MapperScannerRegistrar ，动态导入 bean
  * @since 1.2.0
  * @see MapperScannerRegistrar
  * @see MapperFactoryBean
@@ -81,6 +85,7 @@ import org.springframework.context.annotation.Import;
 public @interface MapperScan {
 
   /**
+   * 扫描的包，与 basePackages 一个意思
    * Alias for the {@link #basePackages()} attribute. Allows for more concise annotation declarations e.g.:
    * {@code @MapperScan("org.my.pkg")} instead of {@code @MapperScan(basePackages = "org.my.pkg"})}.
    *
@@ -97,6 +102,7 @@ public @interface MapperScan {
   String[] basePackages() default {};
 
   /**
+   * 扫描的类
    * Type-safe alternative to {@link #basePackages()} for specifying the packages to scan for annotated components. The
    * package of each class specified will be scanned.
    * <p>
@@ -108,6 +114,7 @@ public @interface MapperScan {
   Class<?>[] basePackageClasses() default {};
 
   /**
+   * beanName 生成器 -- 一般不用配置，不需要搞得花里胡哨
    * The {@link BeanNameGenerator} class to be used for naming detected components within the Spring container.
    *
    * @return the class of {@link BeanNameGenerator}
@@ -115,6 +122,7 @@ public @interface MapperScan {
   Class<? extends BeanNameGenerator> nameGenerator() default BeanNameGenerator.class;
 
   /**
+   * 扫描带有哪些注解的
    * This property specifies the annotation that the scanner will search for.
    * <p>
    * The scanner will register all interfaces in the base package that also have the specified annotation.
@@ -126,6 +134,7 @@ public @interface MapperScan {
   Class<? extends Annotation> annotationClass() default Annotation.class;
 
   /**
+   * 标记哪些接口需要扫描
    * This property specifies the parent that the scanner will search for.
    * <p>
    * The scanner will register all interfaces in the base package that also have the specified interface class as a
@@ -173,6 +182,7 @@ public @interface MapperScan {
   String lazyInitialization() default "";
 
   /**
+   * 默认单例 -- 尽量不要乱配置更换
    * Specifies the default scope of scanned mappers.
    *
    * <p>

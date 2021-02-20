@@ -83,6 +83,10 @@ import org.springframework.util.ClassUtils;
  * @author Eddú Meléndez
  * @author Kazuki Shimizu
  *
+ * SqlSessionFactoryBean ，可以理解为 configuration 中用来解析 mybatis-config.xml 的 DefaultSqlSessionFactory
+ * 负责解析配置的 mybatis-config.xml
+ *
+ *
  * @see #setConfigLocation
  * @see #setDataSource
  */
@@ -91,34 +95,76 @@ public class SqlSessionFactoryBean
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SqlSessionFactoryBean.class);
 
+  /**
+   * 占位符资源解析器
+   */
   private static final ResourcePatternResolver RESOURCE_PATTERN_RESOLVER = new PathMatchingResourcePatternResolver();
   private static final MetadataReaderFactory METADATA_READER_FACTORY = new CachingMetadataReaderFactory();
 
+  /**
+   * 指定 mybatis-config.xml 路径的 Resource 对象
+   */
   private Resource configLocation;
 
+  /**
+   * mybatis Configuration 信息
+   */
   private Configuration configuration;
 
+  /**
+   * 映射文件 **Mapper.xml 路径信息集合
+   */
   private Resource[] mapperLocations;
 
+  /**
+   * 数据源
+   */
   private DataSource dataSource;
 
+  /**
+   * 事务工厂
+   */
   private TransactionFactory transactionFactory;
 
+  /**
+   *  configuration 的外部部分属性
+   */
   private Properties configurationProperties;
 
+  /**
+   * SqlSessionFactoryBuilder mybatis-config.xml 等文件解析加载工厂
+   */
   private SqlSessionFactoryBuilder sqlSessionFactoryBuilder = new SqlSessionFactoryBuilder();
 
+  /**
+   * sqlSession 会话工厂 -- SqlSessionFactoryBean
+   */
   private SqlSessionFactory sqlSessionFactory;
 
   // EnvironmentAware requires spring 3.1
   private String environment = SqlSessionFactoryBean.class.getSimpleName();
 
+  /**
+   * 是否快速失败
+   * 如果为真，则在配置上进行最后的检查，以确保所有映射语句都已完全加载，并且没有仍有待解决的include
+   *
+   * 在 onApplicationEvent 中用到
+   */
   private boolean failFast;
 
+  /**
+   * 插件信息
+   */
   private Interceptor[] plugins;
 
+  /**
+   * 添加 TypeHandler 注册器
+   */
   private TypeHandler<?>[] typeHandlers;
 
+  /**
+   * 注册器扫描的包
+   */
   private String typeHandlersPackage;
 
   @SuppressWarnings("rawtypes")
@@ -402,11 +448,13 @@ public class SqlSessionFactoryBean
    *
    */
   public void setDataSource(DataSource dataSource) {
+    // 如果数据源是 事务代理类 TransactionAwareDataSourceProxy
     if (dataSource instanceof TransactionAwareDataSourceProxy) {
       // If we got a TransactionAwareDataSourceProxy, we need to perform
       // transactions for its underlying target DataSource, else data
       // access code won't see properly exposed transactions (i.e.
       // transactions for the target DataSource).
+      // 则获取目标的数据源
       this.dataSource = ((TransactionAwareDataSourceProxy) dataSource).getTargetDataSource();
     } else {
       this.dataSource = dataSource;
@@ -488,6 +536,7 @@ public class SqlSessionFactoryBean
     state((configuration == null && configLocation == null) || !(configuration != null && configLocation != null),
         "Property 'configuration' and 'configLocation' can not specified with together");
 
+    // 初始化 sqlSessionFactory，并且会解析 configuration 等
     this.sqlSessionFactory = buildSqlSessionFactory();
   }
 
@@ -504,22 +553,29 @@ public class SqlSessionFactoryBean
    */
   protected SqlSessionFactory buildSqlSessionFactory() throws Exception {
 
+    /**
+     * 目标 targetConfiguration
+     */
     final Configuration targetConfiguration;
-
+    // XML 配置构建器 -- 参考 mybatis 源码解析 mybatis-config.xml、mapper.xml 等
     XMLConfigBuilder xmlConfigBuilder = null;
+    // 如果从外部设置了 configuration == 一般不会，所以一般不走这个分支
     if (this.configuration != null) {
       targetConfiguration = this.configuration;
       if (targetConfiguration.getVariables() == null) {
         targetConfiguration.setVariables(this.configurationProperties);
       } else if (this.configurationProperties != null) {
+        // 应用外部属性
         targetConfiguration.getVariables().putAll(this.configurationProperties);
       }
     } else if (this.configLocation != null) {
+      // mybatis-config.xml 配置了
       xmlConfigBuilder = new XMLConfigBuilder(this.configLocation.getInputStream(), null, this.configurationProperties);
       targetConfiguration = xmlConfigBuilder.getConfiguration();
     } else {
       LOGGER.debug(
           () -> "Property 'configuration' or 'configLocation' not specified, using default MyBatis Configuration");
+      // 新建一个 空的
       targetConfiguration = new Configuration();
       Optional.ofNullable(this.configurationProperties).ifPresent(targetConfiguration::setVariables);
     }
@@ -582,6 +638,7 @@ public class SqlSessionFactoryBean
 
     Optional.ofNullable(this.cache).ifPresent(targetConfiguration::addCache);
 
+    // 如果 xmlConfigBuilder 不为空，需要手动调用 mybatis-config.xml 的解析
     if (xmlConfigBuilder != null) {
       try {
         xmlConfigBuilder.parse();
@@ -593,10 +650,12 @@ public class SqlSessionFactoryBean
       }
     }
 
+    // 注意这里设置了 targetConfiguration的setEnvironment ，并且使用了 SpringManagedTransactionFactory 的事务工厂
     targetConfiguration.setEnvironment(new Environment(this.environment,
         this.transactionFactory == null ? new SpringManagedTransactionFactory() : this.transactionFactory,
         this.dataSource));
 
+    // 如果配置了外置的 mapper.xml 集合，则也需要手动触发解析
     if (this.mapperLocations != null) {
       if (this.mapperLocations.length == 0) {
         LOGGER.warn(() -> "Property 'mapperLocations' was specified but matching resources are not found.");
@@ -621,15 +680,23 @@ public class SqlSessionFactoryBean
       LOGGER.debug(() -> "Property 'mapperLocations' was not specified.");
     }
 
+    // 跟 mybatis 一样，最终都是由 sqlSessionFactoryBuilder 进行构建 DefaultSqlSessionFactory（mybatis 是传入 Reader，
+    //    然后还需要解析 mybatis-config，并且mapper 是配置在 mybatis-config 中，没有提供外部配置的 mapperLocations）
     return this.sqlSessionFactoryBuilder.build(targetConfiguration);
   }
 
   /**
+   * 同样，需要关注的 getObject 返回的是初始化好的 sqlSessionFactory ，这个 sqlSessionFactory 实际上还是 DefaultSqlSessionFactory
+   *     只是在 MapperFactoryBean 中获取到的 SqlSession 是经过 SqlSessionTemplate 包装的 DefaultSqlSessionFactory.opensession 等方法
+   *
+   *     见 SqlSessionDaoSupport#createSqlSessionTemplate(sqlSessionFactory)
+   *      -- new SqlSessionTemplate(sqlSessionFactory);
    * {@inheritDoc}
    */
   @Override
   public SqlSessionFactory getObject() throws Exception {
     if (this.sqlSessionFactory == null) {
+      // 确保 afterPropertiesSet 已经触发
       afterPropertiesSet();
     }
 

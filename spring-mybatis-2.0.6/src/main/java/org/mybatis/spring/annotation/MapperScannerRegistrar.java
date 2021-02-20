@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.mybatis.spring.config.MapperScannerBeanDefinitionParser;
 import org.mybatis.spring.mapper.ClassPathMapperScanner;
 import org.mybatis.spring.mapper.MapperFactoryBean;
 import org.mybatis.spring.mapper.MapperScannerConfigurer;
@@ -46,6 +47,8 @@ import org.springframework.util.StringUtils;
  * @author Eduardo Macarron
  * @author Putthiphong Boonphong
  *
+ * Mybatis 注解驱动扫描，动态带入 bean，这里的 Bean 实际上为 Mapper (MapperFactoryBean)
+ *  ResourceLoaderAware 接口，应该是考虑到作为扩展吧
  * @see MapperFactoryBean
  * @see ClassPathMapperScanner
  * @since 1.2.0
@@ -68,17 +71,29 @@ public class MapperScannerRegistrar implements ImportBeanDefinitionRegistrar, Re
    */
   @Override
   public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
+    // 获取 MapperScan 注解的信息，封装为 AnnotationAttributes ，方便读取 注解配置的属性
     AnnotationAttributes mapperScanAttrs = AnnotationAttributes
         .fromMap(importingClassMetadata.getAnnotationAttributes(MapperScan.class.getName()));
     if (mapperScanAttrs != null) {
+      // 注册
       registerBeanDefinitions(importingClassMetadata, mapperScanAttrs, registry,
           generateBaseBeanName(importingClassMetadata, 0));
     }
   }
 
+  /**
+   * 注册 MapperScan 配置的注解，能扫描到的 Bean
+   * @param annoMeta
+   * @param annoAttrs
+   * @param registry
+   * @param beanName
+   */
   void registerBeanDefinitions(AnnotationMetadata annoMeta, AnnotationAttributes annoAttrs,
       BeanDefinitionRegistry registry, String beanName) {
 
+    /**
+     * 其实跟 {@link MapperScannerBeanDefinitionParser} 的逻辑差不多的
+     */
     BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(MapperScannerConfigurer.class);
     builder.addPropertyValue("processPropertyPlaceHolders", true);
 
@@ -138,6 +153,7 @@ public class MapperScannerRegistrar implements ImportBeanDefinitionRegistrar, Re
 
     builder.addPropertyValue("basePackage", StringUtils.collectionToCommaDelimitedString(basePackages));
 
+    // 注册 bean 到 spring 工厂中
     registry.registerBeanDefinition(beanName, builder.getBeanDefinition());
 
   }
@@ -151,12 +167,14 @@ public class MapperScannerRegistrar implements ImportBeanDefinitionRegistrar, Re
   }
 
   /**
+   * 这个主要是 MapperScans 注解对应的 动态 bean 注解导入类
    * A {@link MapperScannerRegistrar} for {@link MapperScans}.
    *
    * @since 2.0.0
    */
   static class RepeatingRegistrar extends MapperScannerRegistrar {
     /**
+     * 遍历 MapperScans 的 value 节点，然后调用 registerBeanDefinitions 注册，很简单的
      * {@inheritDoc}
      */
     @Override

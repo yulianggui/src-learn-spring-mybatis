@@ -23,6 +23,10 @@ import org.springframework.dao.support.PersistenceExceptionTranslator;
 import org.springframework.transaction.support.ResourceHolderSupport;
 
 /**
+ * SqlSession 持有器，用于保存当前的 SqlSession
+ *
+ *  注意： 继承了 ResourceHolderSupport，资源持有支持 ， 这个是跟 Spring 的事务挂钩的
+ *
  * Used to keep current {@code SqlSession} in {@code TransactionSynchronizationManager}. The {@code SqlSessionFactory}
  * that created that {@code SqlSession} is used as a key. {@code ExecutorType} is also kept to be able to check if the
  * user is trying to change it during a TX (that is not allowed) and throw a Exception in that case.

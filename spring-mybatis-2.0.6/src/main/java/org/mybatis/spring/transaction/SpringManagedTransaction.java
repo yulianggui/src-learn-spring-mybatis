@@ -30,6 +30,14 @@ import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
+ * spring-mybatis 的事务实现类
+ *   通过 {@link SpringManagedTransactionFactory} 工厂来创建
+ *
+ * 在 SqlSessionFactoryBean 中，有一段这样的代码
+ *        targetConfiguration.setEnvironment(new Environment(this.environment,
+ *            this.transactionFactory == null ? new SpringManagedTransactionFactory() : this.transactionFactory,
+ *            this.dataSource));
+ *
  * {@code SpringManagedTransaction} handles the lifecycle of a JDBC connection. It retrieves a connection from Spring's
  * transaction manager and returns it back to it when it is no longer needed.
  * <p>
@@ -49,8 +57,15 @@ public class SpringManagedTransaction implements Transaction {
 
   private Connection connection;
 
+  /**
+   * 是否由 spring 管理当前事务
+   * @see DataSourceUtils#isConnectionTransactional(Connection, DataSource)
+   */
   private boolean isConnectionTransactional;
 
+  /**
+   * 是否自动提交
+   */
   private boolean autoCommit;
 
   public SpringManagedTransaction(DataSource dataSource) {
@@ -77,8 +92,11 @@ public class SpringManagedTransaction implements Transaction {
    * false and will always call commit/rollback so we need to no-op that calls.
    */
   private void openConnection() throws SQLException {
+    // 通过 DataSourceUtils 创建 connection 连接
+    // 基于 Spring Transaction 体系，如果此处正在事务中时，已经有和当前线程绑定的 Connection 对象，就是存储在 ThreadLocal 中
     this.connection = DataSourceUtils.getConnection(this.dataSource);
     this.autoCommit = this.connection.getAutoCommit();
+    // 当前连接是否处于spring事务中
     this.isConnectionTransactional = DataSourceUtils.isConnectionTransactional(this.connection, this.dataSource);
 
     LOGGER.debug(() -> "JDBC Connection [" + this.connection + "] will"
@@ -90,6 +108,7 @@ public class SpringManagedTransaction implements Transaction {
    */
   @Override
   public void commit() throws SQLException {
+    // 并且没有处于事务中，并且 autoCommit 为 false ，没有自动提交
     if (this.connection != null && !this.isConnectionTransactional && !this.autoCommit) {
       LOGGER.debug(() -> "Committing JDBC Connection [" + this.connection + "]");
       this.connection.commit();
@@ -112,6 +131,8 @@ public class SpringManagedTransaction implements Transaction {
    */
   @Override
   public void close() throws SQLException {
+    // 关闭 connection
+    // 具体会不会关闭连接，根据当前线程绑定的 Connection 对象，是不是传入的 connection 参数
     DataSourceUtils.releaseConnection(this.connection, this.dataSource);
   }
 
@@ -120,6 +141,7 @@ public class SpringManagedTransaction implements Transaction {
    */
   @Override
   public Integer getTimeout() throws SQLException {
+    // connectionHolder 持有 connection 对象
     ConnectionHolder holder = (ConnectionHolder) TransactionSynchronizationManager.getResource(dataSource);
     if (holder != null && holder.hasTimeout()) {
       return holder.getTimeToLiveInSeconds();

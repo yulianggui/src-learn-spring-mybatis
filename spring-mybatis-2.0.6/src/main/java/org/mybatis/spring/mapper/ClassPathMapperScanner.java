@@ -181,7 +181,7 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
 
     // override AssignableTypeFilter to ignore matches on the actual marker interface
     if (this.markerInterface != null) {
-      // 添加 markerInterface 注解，重写 matchClassName ，说明 markerInterface 的接口将会配忽略掉
+      // 添加 markerInterface 注解，重写 matchClassName ？？ 返回 false 暂时确实意思，是过滤掉还是只是作为一个条件
       addIncludeFilter(new AssignableTypeFilter(this.markerInterface) {
         @Override
         protected boolean matchClassName(String className) {

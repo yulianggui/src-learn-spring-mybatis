@@ -30,7 +30,7 @@ import org.springframework.context.annotation.Import;
  * Can be used natively, declaring several nested {@link MapperScan} annotations. Can also be used in conjunction with
  * Java 8's support for repeatable annotations, where {@link MapperScan} can simply be declared several times on the
  * same method, implicitly generating this container annotation.
- *
+ * 多个 MapperScan
  * @author Kazuki Shimizu
  * @since 2.0.0
  * @see MapperScan
