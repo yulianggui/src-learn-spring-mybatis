@@ -1,5 +1,5 @@
 /**
- * Copyright 2010-2020 the original author or authors.
+ * Copyright 2010-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,6 +50,8 @@ import org.springframework.util.StringUtils;
  * @author Hunter Presnall
  * @author Eduardo Macarron
  *
+ * Spring Mybatis Mapper 扫描注册
+ *
  * @see MapperFactoryBean
  * @since 1.2.0
  */
@@ -76,6 +78,9 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
 
   private Class<?> markerInterface;
 
+  /**
+   * 默认的 mapperFactoryBeanClass 工厂
+   */
   private Class<? extends MapperFactoryBean> mapperFactoryBeanClass = MapperFactoryBean.class;
 
   private String defaultScope;
@@ -164,16 +169,19 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
    * that extends a markerInterface or/and those annotated with the annotationClass
    */
   public void registerFilters() {
+    // 标志，是否接受所有的接口
     boolean acceptAllInterfaces = true;
 
     // if specified, use the given annotation and / or marker interface
     if (this.annotationClass != null) {
+      // 包含该注解 -- 这里会涉及到 spring 的 typeFilter 的功能，暂时不加深理解
       addIncludeFilter(new AnnotationTypeFilter(this.annotationClass));
       acceptAllInterfaces = false;
     }
 
     // override AssignableTypeFilter to ignore matches on the actual marker interface
     if (this.markerInterface != null) {
+      // 添加 markerInterface 注解，重写 matchClassName ，说明 markerInterface 的接口将会配忽略掉
       addIncludeFilter(new AssignableTypeFilter(this.markerInterface) {
         @Override
         protected boolean matchClassName(String className) {
@@ -183,12 +191,15 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
       acceptAllInterfaces = false;
     }
 
+    // 如果 annotationClass 、markerInterface 均没有配置
     if (acceptAllInterfaces) {
       // default include filter that accepts all classes
+      // 默认包含过滤器，接受所有类
       addIncludeFilter((metadataReader, metadataReaderFactory) -> true);
     }
 
     // exclude package-info.java
+    // 排除掉 package-info.java
     addExcludeFilter((metadataReader, metadataReaderFactory) -> {
       String className = metadataReader.getClassMetadata().getClassName();
       return className.endsWith("package-info");
@@ -201,12 +212,15 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
    */
   @Override
   public Set<BeanDefinitionHolder> doScan(String... basePackages) {
+
+    // 先调用父类的 doScan 即 ClassPathBeanDefinitionScanner，得到解析好的 ClassPathBeanDefinitionScanner
     Set<BeanDefinitionHolder> beanDefinitions = super.doScan(basePackages);
 
     if (beanDefinitions.isEmpty()) {
       LOGGER.warn(() -> "No MyBatis mapper was found in '" + Arrays.toString(basePackages)
           + "' package. Please check your configuration.");
     } else {
+      // 进一步加工 beanDefinitions，进行改造
       processBeanDefinitions(beanDefinitions);
     }
 
@@ -215,10 +229,15 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
 
   private void processBeanDefinitions(Set<BeanDefinitionHolder> beanDefinitions) {
     AbstractBeanDefinition definition;
+    // 获得上下文bean 注册器，调用 父类的方法
     BeanDefinitionRegistry registry = getRegistry();
+    // 遍历 beanDefinitions
     for (BeanDefinitionHolder holder : beanDefinitions) {
+      // 强转为 AbstractBeanDefinition
       definition = (AbstractBeanDefinition) holder.getBeanDefinition();
+      // 是否为生成的代理对象（Mapper 只是接口，要生成代理对象）
       boolean scopedProxy = false;
+      // 如果为代理对象，则获取装饰过后的 对象定义（代理对象定义）
       if (ScopedProxyFactoryBean.class.getName().equals(definition.getBeanClassName())) {
         definition = (AbstractBeanDefinition) Optional
             .ofNullable(((RootBeanDefinition) definition).getDecoratedDefinition())
@@ -226,12 +245,16 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
                 "The target bean definition of scoped proxy bean not found. Root bean definition[" + holder + "]"));
         scopedProxy = true;
       }
+      // 获取 BeanClassName
       String beanClassName = definition.getBeanClassName();
       LOGGER.debug(() -> "Creating MapperFactoryBean with name '" + holder.getBeanName() + "' and '" + beanClassName
           + "' mapperInterface");
 
+      // mapper接口是bean的原始类，但是bean的实际类是MapperFactoryBean
       // the mapper interface is the original class of the bean
       // but, the actual class of the bean is MapperFactoryBean
+      // 获取构造方法的参数集合，添加
+      // 此处 definition 的 beanClass 为 Mapper 接口，需要修改成 MapperFactoryBean 类，从而创建 Mapper 代理对象
       definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName); // issue #59
       definition.setBeanClass(this.mapperFactoryBeanClass);
 
@@ -241,6 +264,8 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
       // https://github.com/mybatis/spring-boot-starter/issues/475
       definition.setAttribute(FACTORY_BEAN_OBJECT_TYPE, beanClassName);
 
+      // 是否已经显式设置了 sqlSessionFactory 或 sqlSessionFactory 属性
+      // 如果 sqlSessionFactoryBeanName 或 sqlSessionFactory 非空，设置到 `MapperFactoryBean.sqlSessionFactory` 属性
       boolean explicitFactoryUsed = false;
       if (StringUtils.hasText(this.sqlSessionFactoryBeanName)) {
         definition.getPropertyValues().add("sqlSessionFactory",
@@ -268,6 +293,7 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
         explicitFactoryUsed = true;
       }
 
+      // 如果上述的  sqlSessionTemplate 、sqlSessionFactory 未显式设置，则设置根据类型自动注入，根据类型自动注入
       if (!explicitFactoryUsed) {
         LOGGER.debug(() -> "Enabling autowire by type for MapperFactoryBean with name '" + holder.getBeanName() + "'.");
         definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
@@ -279,15 +305,18 @@ public class ClassPathMapperScanner extends ClassPathBeanDefinitionScanner {
         continue;
       }
 
+      // 设置为单例
       if (ConfigurableBeanFactory.SCOPE_SINGLETON.equals(definition.getScope()) && defaultScope != null) {
         definition.setScope(defaultScope);
       }
 
       if (!definition.isSingleton()) {
+        // 创建代理类，替换掉 原始类
         BeanDefinitionHolder proxyHolder = ScopedProxyUtils.createScopedProxy(holder, registry, true);
         if (registry.containsBeanDefinition(proxyHolder.getBeanName())) {
           registry.removeBeanDefinition(proxyHolder.getBeanName());
         }
+        // 注册代理类
         registry.registerBeanDefinition(proxyHolder.getBeanName(), proxyHolder.getBeanDefinition());
       }
 

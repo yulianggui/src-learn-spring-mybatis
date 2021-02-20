@@ -1,5 +1,5 @@
 /**
- * Copyright 2010-2020 the original author or authors.
+ * Copyright 2010-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,9 @@ package org.mybatis.spring.config;
 import org.springframework.beans.factory.xml.NamespaceHandlerSupport;
 
 /**
+ * spring 自定义标签扩展
+ * <mybatis:scan/>  MyBatis 注解扫描开启 类似于 @MapperScan
+ *
  * Namespace handler for the MyBatis namespace.
  *
  * @author Lishu Luo

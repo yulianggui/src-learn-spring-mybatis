@@ -1,5 +1,5 @@
 /**
- * Copyright 2010-2020 the original author or authors.
+ * Copyright 2010-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,11 @@ import org.springframework.beans.factory.FactoryBean;
  *
  * @author Eduardo Macarron
  *
+ * Mapper 在容器中的 Bean 对象就是一个 MapperFactoryBean，注意一下几点
+ * 1、extends SqlSessionDaoSupport，里边有 sqlSessionFactoryBean（set 自动注入） 、sqlSessionTemplate（自动注入，或者注入 sqlSessionFactoryBean 时初始化）
+ * 2、getObject 方法，需要了解一点， spring 中 实现了 FactoryBean 接口的 bean，当调用 getBean 时（依赖注入也好，收到调用也好），实际上返回的是 getObject 的方法返回值
+ * 3、afterPropertiesSet 方法触发 checkDaoConfig 的调用
+ *
  * @see SqlSessionTemplate
  */
 public class MapperFactoryBean<T> extends SqlSessionDaoSupport implements FactoryBean<T> {
@@ -61,6 +66,17 @@ public class MapperFactoryBean<T> extends SqlSessionDaoSupport implements Factor
     // intentionally empty
   }
 
+  /**
+   * 构造注入
+   *    见 ClassPathMapperScanner#doScan -> processBeanDefinition
+   *     definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName); // issue #59
+   *
+   *    接口，困惑依旧的地方（之前有个时间点，一直搞不明白的点：
+   *        在 checkDaoConfig 方法会校验 mapperInterface 不为 null，而 在 MapperScannerBeanDefinitionParser 等地方看不到 mapperInterface 属性的设置
+   *        终于在上述中得到解答，答案就是构造注入
+   *        ，为啥 this.mapperInterface 属性）
+   * @param mapperInterface
+   */
   public MapperFactoryBean(Class<T> mapperInterface) {
     this.mapperInterface = mapperInterface;
   }
@@ -77,6 +93,7 @@ public class MapperFactoryBean<T> extends SqlSessionDaoSupport implements Factor
     Configuration configuration = getSqlSession().getConfiguration();
     if (this.addToConfig && !configuration.hasMapper(this.mapperInterface)) {
       try {
+        // 添加到 configuration 中
         configuration.addMapper(this.mapperInterface);
       } catch (Exception e) {
         logger.error("Error while adding the mapper '" + this.mapperInterface + "' to configuration.", e);
@@ -88,10 +105,13 @@ public class MapperFactoryBean<T> extends SqlSessionDaoSupport implements Factor
   }
 
   /**
+   * 重点
    * {@inheritDoc}
    */
   @Override
   public T getObject() throws Exception {
+    // 返回的是 configuration 中的 MapperProxy
+    // 而 sqlSession 为 SqlSessionTemplate
     return getSqlSession().getMapper(this.mapperInterface);
   }
 
